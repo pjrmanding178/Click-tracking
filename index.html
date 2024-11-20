@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real-Time Location Map</title>
+    <title>Driving Map</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -14,74 +14,179 @@
             width: 100%;
             border-radius: 20px;
         }
+        .leaflet-routing-container {
+            display: none !important;
+        }
+        .blue-dot {
+            background-color: blue;
+            border-radius: 50%;
+            width: 10px;
+            height: 10px;
+            position: relative;
+            z-index: 9999;
+        }
     </style>
 </head>
 <body class="bg-gray-100 h-screen flex flex-col items-center justify-start p-4 relative">
+
     <div class="mobile-tablet-only w-full max-w-lg mx-auto">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center">
+                <a href="#" class="ml-2 text-lg font-semibold text-gray-500">Start Driving to Share Location</a>
+            </div>
+        </div>
+
         <div id="map" class="mb-6"></div>
 
+        <div id="route-info" class="bg-white rounded-lg p-4 shadow-md">
+            <div class="flex items-start justify-between">
+                <div id="start-info">
+                    <div class="flex items-center mb-4">
+                        <div class="w-4 h-4 bg-green-500 rounded-full mr-2"></div>
+                        <div>
+                            <h3 id="start-text" class="font-bold text-gray-500">Start: Waiting for user location...</h3>
+                        </div>
+                    </div>
+                </div>
+                <div id="end-info">
+                    <div class="flex items-center">
+                        <div class="w-4 h-4 bg-blue-500 rounded-full mr-2"></div>
+                        <div>
+                            <h3 id="destination-text" class="font-bold text-gray-500">Destination: Click Map to Set</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="travel-info" class="mt-4 text-right">
+                <p id="travel-time" class="text-sm text-gray-500">Travel Time: Calculating...</p>
+                <p id="distance" class="text-sm text-gray-500">Distance: Calculating...</p>
+            </div>
+        </div>
+
+        <!-- Start/Stop Driving Button -->
         <div class="mt-8">
-            <button id="toggle-tracking" class="w-full bg-red-600 text-white text-lg font-semibold py-3 rounded-lg">
-                Start Sharing Location
+            <button id="start-driving" disabled class="w-full bg-gray-400 text-white text-lg font-semibold py-3 rounded-lg transition duration-200">
+                Start Driving
             </button>
         </div>
     </div>
 
     <script>
-        let map = L.map('map').setView([16.153958483283986, 119.97947908028726], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        const district1Bounds = [
+            [16.001, 119.800], // Southwest corner
+            [16.312, 120.200]  // Northeast corner
+        ];
 
-        let marker = L.marker([16.153958483283986, 119.97947908028726]).addTo(map);
+        let map = L.map('map', {
+            maxBounds: district1Bounds,
+            maxBoundsViscosity: 1.0,
+            minZoom: 12,
+            maxZoom: 18,
+        }).setView([16.153958483283986, 119.97947908028726], 13);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        let isSharing = false;
+        let destinationSet = false;
+
+        let startMarker = null;
+        let endMarker = null;
         let routingControl = L.Routing.control({
-            waypoints: [L.latLng(16.153958483283986, 119.97947908028726), L.latLng(16.155, 119.985)], // Add a dummy destination
+            waypoints: [],
             routeWhileDragging: true,
             createMarker: function() { return null; }
         }).addTo(map);
 
-        let isTracking = false;
-        let watchID;
+        // On map click, allow setting the destination
+        map.on('click', function (e) {
+            if (isSharing) return;
+            if (endMarker) map.removeLayer(endMarker);
 
-        document.getElementById('toggle-tracking').addEventListener('click', function () {
-            if (!isTracking) {
-                if (navigator.geolocation) {
-                    watchID = navigator.geolocation.watchPosition(function (position) {
-                        const newLat = position.coords.latitude;
-                        const newLng = position.coords.longitude;
-                        const newLatLng = L.latLng(newLat, newLng);
+            endMarker = L.marker(e.latlng, {
+                icon: L.icon({
+                    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41]
+                })
+            }).addTo(map);
 
-                        // Update the marker and map view
-                        marker.setLatLng(newLatLng);
-                        map.setView(newLatLng, map.getZoom());
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${e.latlng.lat}&lon=${e.latlng.lng}`)
+                .then(response => response.json())
+                .then(data => {
+                    const locationName = data.display_name || "Unknown location";
+                    document.getElementById('destination-text').innerText = `Destination: ${locationName}`;
+                })
+                .catch(() => {
+                    document.getElementById('destination-text').innerText = `Destination: Error fetching location`;
+                });
 
-                        // Update the starting point of the route dynamically
-                        let currentWaypoints = routingControl.getWaypoints();
-                        routingControl.setWaypoints([newLatLng, currentWaypoints[1].latLng]);
-
-                    }, function (error) {
-                        alert("Error: " + error.message);
-                    }, {
-                        enableHighAccuracy: true,
-                        maximumAge: 1000
-                    });
-
-                    this.innerHTML = 'Stop Sharing Location';
-                } else {
-                    alert('Geolocation is not supported by your browser.');
-                }
-                isTracking = true;
-            } else {
-                navigator.geolocation.clearWatch(watchID);
-                this.innerHTML = 'Start Sharing Location';
-                isTracking = false;
+            destinationSet = true;
+            if (startMarker) {
+                routingControl.setWaypoints([startMarker.getLatLng(), e.latlng]);
+                calculateDistanceAndTime();
             }
         });
 
-        routingControl.on('routesfound', function(e) {
-            const route = e.routes[0];
-            const travelTime = Math.round(route.summary.totalTime / 60); // Convert seconds to minutes
-            const distance = (route.summary.totalDistance / 1000).toFixed(2); // Convert meters to kilometers
-            console.log(`Travel Time: ${travelTime} minutes`);
-            console.log(`Distance: ${distance} km`);
+        // Get user location
+        navigator.geolocation.getCurrentPosition(
+            function (position) {
+                const userLatLng = [position.coords.latitude, position.coords.longitude];
+                startMarker = L.marker(userLatLng, {
+                    icon: L.icon({
+                        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41]
+                    })
+                }).addTo(map);
+
+                document.getElementById('start-text').innerText = `Start: Latitude ${userLatLng[0]}, Longitude ${userLatLng[1]}`;
+
+                map.setView(userLatLng, 13);
+                document.getElementById('start-driving').disabled = false;
+            },
+            function () {
+                alert("Could not fetch your location.");
+            }
+        );
+
+        // Calculate distance and time
+        function calculateDistanceAndTime() {
+            routingControl.on('routesfound', function (e) {
+                const route = e.routes[0];
+                const distanceKm = (route.summary.totalDistance / 1000).toFixed(2);
+                const durationMin = Math.ceil(route.summary.totalTime / 60);
+
+                document.getElementById('distance').innerText = `Distance: ${distanceKm} km`;
+                document.getElementById('travel-time').innerText = `Travel Time: ${durationMin} mins`;
+            });
+        }
+
+        // Start/Stop sharing button logic
+        document.getElementById('start-driving').addEventListener('click', function () {
+            if (!destinationSet) {
+                alert("Please set a destination before starting to share location.");
+                return;
+            }
+
+            isSharing = !isSharing;
+            this.innerText = isSharing ? "Stop Driving" : "Start Driving";
+            this.classList.toggle('bg-green-500', isSharing);
+            this.classList.toggle('bg-gray-400', !isSharing);
+
+            if (isSharing) {
+                alert("Sharing location...");
+                // Add your location sharing logic here.
+            } else {
+                alert("Stopped sharing location.");
+                routingControl.setWaypoints([]);
+                if (endMarker) map.removeLayer(endMarker);
+                destinationSet = false;
+                document.getElementById('destination-text').innerText = "Destination: Click Map to Set";
+                document.getElementById('distance').innerText = "Distance: Calculating...";
+                document.getElementById('travel-time').innerText = "Travel Time: Calculating...";
+            }
         });
     </script>
 </body>
