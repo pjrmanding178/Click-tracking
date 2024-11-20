@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Driving Map</title>
+    <title>Real-Time Location Map</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -13,9 +13,6 @@
             height: 400px;
             width: 100%;
             border-radius: 20px;
-        }
-        .leaflet-routing-container {
-            display: none !important;
         }
     </style>
 </head>
@@ -35,6 +32,12 @@
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
         let marker = L.marker([16.153958483283986, 119.97947908028726]).addTo(map);
+        let routingControl = L.Routing.control({
+            waypoints: [L.latLng(16.153958483283986, 119.97947908028726)],
+            routeWhileDragging: true,
+            createMarker: function() { return null; }
+        }).addTo(map);
+
         let isTracking = false;
         let watchID;
 
@@ -47,6 +50,7 @@
                         const newLatLng = new L.LatLng(newLat, newLng);
                         marker.setLatLng(newLatLng);
                         map.setView(newLatLng, map.getZoom());
+                        routingControl.setWaypoints([newLatLng, routingControl.getWaypoints()[1]]);
                     }, function (error) {
                         alert("Error: " + error.message);
                     }, {
@@ -64,6 +68,12 @@
                 this.innerHTML = 'Start Sharing Location';
                 isTracking = false;
             }
+        });
+
+        routingControl.on('routesfound', function(e) {
+            var routes = e.routes;
+            var summary = routes[0].summary;
+            // Display route summary
         });
     </script>
 </body>
