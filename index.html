@@ -9,23 +9,25 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-routing-machine@3.2.2/dist/leaflet-routing-machine.js"></script>
     <style>
-        #map {
-            height: 400px;
-            width: 100%;
-            border-radius: 20px;
-            filter: brightness(70%); /* Dull the screen */
-        }
-        .leaflet-routing-container {
-            display: none !important;
-        }
-        .blue-dot {
-            background-color: blue;
-            border-radius: 50%;
-            width: 10px;
-            height: 10px;
-            position: relative;
-            z-index: 9999;
-        }
+        
+   #map {
+        height: 400px;
+        width: 100%;
+        border-radius: 20px;
+        /* Remove or comment out the brightness filter to restore normal brightness */
+        /* filter: brightness(70%); */
+    }
+    .leaflet-routing-container {
+        display: none !important;
+    }
+    .blue-dot {
+        background-color: blue;
+        border-radius: 50%;
+        width: 10px;
+        height: 10px;
+        position: relative;
+        z-index: 9999;
+    }
     </style>
 </head>
 <body class="bg-gray-100 h-screen flex flex-col items-center justify-start p-4 relative">
