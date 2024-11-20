@@ -3,64 +3,81 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fullscreen Map</title>
+    <title>Driving Map</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-routing-machine@3.2.2/dist/leaflet-routing-machine.js"></script>
     <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            width: 100%;
-        }
-
         #map {
-            height: 100%;
+            height: 400px;
             width: 100%;
-            position: relative;
+            border-radius: 20px;
+            filter: brightness(70%); /* Dull the screen */
         }
-
         .leaflet-routing-container {
             display: none !important;
         }
-
-        .fullscreen-btn {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            z-index: 1000;
-            background-color: white;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            padding: 5px 10px;
-            cursor: pointer;
-            font-size: 14px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-        }
-
-        .fullscreen-btn:hover {
-            background-color: #f0f0f0;
+        .blue-dot {
+            background-color: blue;
+            border-radius: 50%;
+            width: 10px;
+            height: 10px;
+            position: relative;
+            z-index: 9999;
         }
     </style>
 </head>
-<body>
+<body class="bg-gray-100 h-screen flex flex-col items-center justify-start p-4 relative">
 
-    <!-- Map container -->
-    <div id="map"></div>
+    <div class="mobile-tablet-only w-full max-w-lg mx-auto">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center">
+                <a href="#" class="ml-2 text-lg font-semibold text-gray-500">Start Driving to Share Location</a>
+            </div>
+        </div>
 
-    <!-- Fullscreen button -->
-    <div class="fullscreen-btn" id="fullscreen-btn">Fullscreen</div>
+        <div id="map" class="mb-6"></div>
+
+        <div id="route-info" class="bg-white rounded-lg p-4 shadow-md">
+            <div class="flex items-start justify-between">
+                <div id="start-info">
+                    <div class="flex items-center mb-4">
+                        <div class="w-4 h-4 bg-green-500 rounded-full mr-2"></div>
+                        <div>
+                            <h3 id="start-text" class="font-bold text-gray-500">Start: Waiting for user location...</h3>
+                        </div>
+                    </div>
+                </div>
+                <div id="end-info">
+                    <div class="flex items-center">
+                        <div class="w-4 h-4 bg-blue-500 rounded-full mr-2"></div>
+                        <div>
+                            <h3 id="destination-text" class="font-bold text-gray-500">Destination: Click Map to Set</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="travel-info" class="mt-4 text-right">
+                <p id="travel-time" class="text-sm text-gray-500">Travel Time: Calculating...</p>
+                <p id="distance" class="text-sm text-gray-500">Distance: Calculating...</p>
+            </div>
+        </div>
+
+        <!-- Start/Stop Driving Button -->
+        <div class="mt-8">
+            <button id="start-driving" disabled class="w-full bg-gray-400 text-white text-lg font-semibold py-3 rounded-lg transition duration-200">
+                Start Driving
+            </button>
+        </div>
+    </div>
 
     <script>
-        // Set bounds for District 1 in Pangasinan
         const district1Bounds = [
             [16.001, 119.800], // Southwest corner
             [16.312, 120.200]  // Northeast corner
         ];
 
-        // Initialize the map
         let map = L.map('map', {
             maxBounds: district1Bounds,
             maxBoundsViscosity: 1.0,
@@ -68,32 +85,20 @@
             maxZoom: 18,
         }).setView([16.153958483283986, 119.97947908028726], 13);
 
-        // Add OpenStreetMap tiles
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
         let isSharing = false;
+        let destinationSet = false;
+
         let startMarker = null;
         let endMarker = null;
         let routingControl = L.Routing.control({
             waypoints: [],
             routeWhileDragging: true,
-            createMarker: function () { return null; }
+            createMarker: function() { return null; }
         }).addTo(map);
-
-        // Fullscreen functionality
-        const fullscreenButton = document.getElementById('fullscreen-btn');
-        fullscreenButton.addEventListener('click', () => {
-            const mapElement = document.getElementById('map');
-            if (!document.fullscreenElement) {
-                mapElement.requestFullscreen().catch(err => {
-                    alert(`Error attempting to enable fullscreen mode: ${err.message}`);
-                });
-            } else {
-                document.exitFullscreen();
-            }
-        });
 
         // On map click, allow setting the destination
         map.on('click', function (e) {
@@ -112,60 +117,78 @@
                 .then(response => response.json())
                 .then(data => {
                     const locationName = data.display_name || "Unknown location";
-                    alert(`Destination: ${locationName}`);
+                    document.getElementById('destination-text').innerText = `Destination: ${locationName}`;
                 })
                 .catch(() => {
-                    alert("Destination: Unable to fetch location");
+                    document.getElementById('destination-text').innerText = "Destination: Unable to fetch location";
                 });
+
+            destinationSet = true;
+            document.getElementById('start-driving').disabled = false;
+            document.getElementById('start-driving').classList.remove('bg-gray-400');
+            document.getElementById('start-driving').classList.add('bg-red-600');
         });
 
         // Start/Stop sharing live location
-        document.addEventListener('keydown', function (event) {
-            if (event.key === "s") { // Press 'S' to start/stop driving
-                if (!isSharing) {
-                    if (navigator.geolocation) {
-                        navigator.geolocation.getCurrentPosition(function (position) {
-                            const lat = position.coords.latitude;
-                            const lng = position.coords.longitude;
+        document.getElementById('start-driving').addEventListener('click', function () {
+            if (!isSharing) {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(function (position) {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
 
-                            if (startMarker) map.removeLayer(startMarker);
+                        if (startMarker) map.removeLayer(startMarker);
 
-                            // Add blue dot for location marker
-                            startMarker = L.circleMarker([lat, lng], {
-                                color: 'blue',
-                                radius: 5,
-                                fillOpacity: 0.8
-                            }).addTo(map);
+                        // Add blue dot for location marker
+                        startMarker = L.circleMarker([lat, lng], {
+                            color: 'blue',
+                            radius: 5,
+                            fillOpacity: 0.8
+                        }).addTo(map);
 
-                            map.setView([lat, lng], 15);
+                        map.setView([lat, lng], 15);
 
-                            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
-                                .then(response => response.json())
-                                .then(data => {
-                                    const startName = data.display_name || "Unknown location";
-                                    alert(`Start: ${startName}`);
-                                })
-                                .catch(() => {
-                                    alert("Start: Unable to fetch location");
-                                });
+                        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+                            .then(response => response.json())
+                            .then(data => {
+                                const startName = data.display_name || "Unknown location";
+                                document.getElementById('start-text').innerText = `Start: ${startName}`;
+                            })
+                            .catch(() => {
+                                document.getElementById('start-text').innerText = "Start: Unable to fetch location";
+                            });
 
-                            routingControl.setWaypoints([
-                                L.latLng(lat, lng),
-                                endMarker ? endMarker.getLatLng() : null
-                            ]);
-                        }, function (error) {
-                            alert("Unable to fetch location: " + error.message);
-                        });
-                    } else {
-                        alert("Geolocation is not supported by your browser.");
-                    }
-
-                    isSharing = true;
+                        routingControl.setWaypoints([
+                            L.latLng(lat, lng),
+                            endMarker.getLatLng()
+                        ]);
+                    }, function (error) {
+                        alert("Unable to fetch location: " + error.message);
+                    });
                 } else {
-                    isSharing = false;
-
-                    routingControl.setWaypoints([]);
+                    alert("Geolocation is not supported by your browser.");
                 }
+
+                isSharing = true;
+                map.off('click');
+                document.getElementById('start-driving').innerText = "Stop Driving";
+            } else {
+                isSharing = false;
+                map.on('click', function (e) {
+                    if (isSharing) return;
+                    if (endMarker) map.removeLayer(endMarker);
+
+                    endMarker = L.marker(e.latlng, {
+                        icon: L.icon({
+                            iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                            iconSize: [25, 41],
+                            iconAnchor: [12, 41]
+                        })
+                    }).addTo(map);
+                });
+
+                document.getElementById('start-driving').innerText = "Start Driving";
+                routingControl.setWaypoints([]);
             }
         });
 
@@ -174,7 +197,8 @@
             const travelTime = Math.round(route.summary.totalTime / 60);
             const distance = (route.summary.totalDistance / 1000).toFixed(2);
 
-            alert(`Travel Time: ${travelTime} minutes\nDistance: ${distance} km`);
+            document.getElementById('travel-time').innerText = `Travel Time: ${travelTime} minutes`;
+            document.getElementById('distance').innerText = `Distance: ${distance} km`;
         });
     </script>
 </body>
