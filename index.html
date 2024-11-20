@@ -33,7 +33,7 @@
 
         let marker = L.marker([16.153958483283986, 119.97947908028726]).addTo(map);
         let routingControl = L.Routing.control({
-            waypoints: [L.latLng(16.153958483283986, 119.97947908028726)],
+            waypoints: [L.latLng(16.153958483283986, 119.97947908028726), L.latLng(16.155, 119.985)], // Add a dummy destination
             routeWhileDragging: true,
             createMarker: function() { return null; }
         }).addTo(map);
@@ -47,10 +47,16 @@
                     watchID = navigator.geolocation.watchPosition(function (position) {
                         const newLat = position.coords.latitude;
                         const newLng = position.coords.longitude;
-                        const newLatLng = new L.LatLng(newLat, newLng);
+                        const newLatLng = L.latLng(newLat, newLng);
+
+                        // Update the marker and map view
                         marker.setLatLng(newLatLng);
                         map.setView(newLatLng, map.getZoom());
-                        routingControl.setWaypoints([newLatLng, routingControl.getWaypoints()[1]]);
+
+                        // Update the starting point of the route dynamically
+                        let currentWaypoints = routingControl.getWaypoints();
+                        routingControl.setWaypoints([newLatLng, currentWaypoints[1].latLng]);
+
                     }, function (error) {
                         alert("Error: " + error.message);
                     }, {
@@ -71,9 +77,11 @@
         });
 
         routingControl.on('routesfound', function(e) {
-            var routes = e.routes;
-            var summary = routes[0].summary;
-            // Display route summary
+            const route = e.routes[0];
+            const travelTime = Math.round(route.summary.totalTime / 60); // Convert seconds to minutes
+            const distance = (route.summary.totalDistance / 1000).toFixed(2); // Convert meters to kilometers
+            console.log(`Travel Time: ${travelTime} minutes`);
+            console.log(`Distance: ${distance} km`);
         });
     </script>
 </body>
